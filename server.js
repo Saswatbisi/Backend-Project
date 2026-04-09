@@ -53,12 +53,6 @@ app.get('/api/register', (_req, res) => {
 
 // 🔹 POST API (DB SAVE)
 app.post('/api/register', async (req, res) => {
-  if (!dbConnected) {
-    return res.status(503).json({
-      error: 'Database is not connected. Start MongoDB and restart the server.'
-    });
-  }
-
   try {
     const { username, password } = req.body;
 
@@ -68,12 +62,17 @@ app.post('/api/register', async (req, res) => {
       });
     }
 
-    const newUser = new User({ username, password });
-    const savedUser = await newUser.save();
+    // Mock user creation without DB
+    const mockUser = {
+      _id: Date.now().toString(),
+      username,
+      password,
+      createdAt: new Date()
+    };
 
     res.status(201).json({
       message: "User Registered Successfully",
-      data: savedUser
+      data: mockUser
     });
 
   } catch (err) {

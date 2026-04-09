@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-const dbURI = process.env.DB_URL || 'mongodb://localhost:27017/my_backend_db';
+const dbURI = process.env.DB_URL || 'mongodb+srv://<db_username>:<db_password>@cluster0.hvhxsjy.mongodb.net/?appName=Cluster0';
 
 const connectDB = async () => {
   try {
