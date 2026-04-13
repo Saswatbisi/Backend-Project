@@ -12,8 +12,9 @@ const connectDB = require('./db');
 // 🔗 Controller
 const userController = require('./controllers/userController');
 
-// ✅ MODEL
+// ✅ MODELS
 const User = require('./models/User');
+const Post = require('./models/Post');
 
 // ✅ AUTH MIDDLEWARE
 const auth = require('./middleware/auth');
@@ -141,6 +142,39 @@ app.get('/api/dashboard', auth, (req, res) => {
     message: 'Welcome to the Private Dashboard',
     user: req.user
   });
+});
+
+// ═══════════════════════════════════════════
+// 📝 SECTION 4: POSTS (Data Relationships & Population)
+// ═══════════════════════════════════════════
+
+// @route   POST /api/posts
+// @desc    Create a post linked to the logged-in user
+app.post('/api/posts', auth, async (req, res) => {
+  try {
+    const newPost = new Post({
+      title: req.body.title,
+      content: req.body.content,
+      author: req.user.id // Taken from the JWT middleware
+    });
+
+    const post = await newPost.save();
+    res.json(post);
+  } catch (err) {
+    res.status(500).send('Server Error');
+  }
+});
+
+// @route   GET /api/posts
+// @desc    Get all posts with Author details
+app.get('/api/posts', async (req, res) => {
+  try {
+    // Find posts and "fill in" the author name and email
+    const posts = await Post.find().populate('author', ['username', 'email']);
+    res.json(posts);
+  } catch (err) {
+    res.status(500).send('Server Error');
+  }
 });
 
 // 🔹 Start server
