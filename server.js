@@ -166,12 +166,28 @@ app.post('/api/posts', auth, async (req, res) => {
 });
 
 // @route   GET /api/posts
-// @desc    Get all posts with Author details
+// @desc    Get all posts with Author details and pagination
 app.get('/api/posts', async (req, res) => {
   try {
-    // Find posts and "fill in" the author name and email
-    const posts = await Post.find().populate('author', ['username', 'email']);
-    res.json(posts);
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    // Find posts, add pagination, and "fill in" the author name and email
+    const posts = await Post.find()
+      .skip(skip)
+      .limit(limit)
+      .populate('author', ['username', 'email']);
+      
+    const total = await Post.countDocuments();
+
+    res.json({
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+      totalPosts: total,
+      posts
+    });
   } catch (err) {
     res.status(500).send('Server Error');
   }
