@@ -6,6 +6,53 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const app = express();
 
+const http = require('http');
+const { Server } = require('socket.io');
+
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: { origin: "*" }
+});
+
+io.use((socket, next) => {
+  const token = socket.handshake.auth.token;
+  if (!token) {
+    return next(new Error("Unauthorized"));
+  }
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    socket.user = decoded;
+    next();
+  } catch (err) {
+    next(new Error("Unauthorized"));
+  }
+});
+
+io.on('connection', (socket) => {
+  console.log(`A user connected: ${socket.id}`);
+
+  // Listen for a specific event
+  socket.on('message', (data) => {
+    console.log('Message received:', data);
+    // Broadcast to EVERYONE connected
+    io.emit('message_broadcast', data);
+  });
+
+  socket.on('join_activity', (activityId) => {
+    socket.join(activityId);
+    console.log(`User joined room: ${activityId}`);
+  });
+
+  socket.on('send_activity_chat', (data) => {
+    // Send ONLY to users in that specific activity room
+    io.to(data.activityId).emit('new_chat', data.message);
+  });
+
+  socket.on('disconnect', () => {
+    console.log('User disconnected');
+  });
+});
+
 // ✅ DB CONNECTION
 const connectDB = require('./db');
 
@@ -194,6 +241,6 @@ app.get('/api/posts', async (req, res) => {
 });
 
 // 🔹 Start server
-app.listen(port, () => {
+server.listen(port, () => {
   console.log(`🚀 Server started on port ${port}`);
 });
