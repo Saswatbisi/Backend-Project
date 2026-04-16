@@ -4,6 +4,7 @@ require('dotenv').config();
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const { Worker } = require('worker_threads');
 const app = express();
 
 const http = require('http');
@@ -238,6 +239,47 @@ app.get('/api/posts', async (req, res) => {
   } catch (err) {
     res.status(500).send('Server Error');
   }
+});
+
+// ═══════════════════════════════════════════
+// ⚙️ SECTION 5: BACKGROUND TASKS & QUEUES
+// ═══════════════════════════════════════════
+
+// @route   GET /api/block
+// @desc    Blocking route that freezes the event loop
+app.get('/api/block', (req, res) => {
+  console.log(`[${new Date().toISOString()}] Starting blocking task...`);
+  const startTime = Date.now();
+  let result = 0;
+  for (let i = 0; i < 1000000000; i++) {
+    result += i;
+  }
+  const endTime = Date.now();
+  console.log(`[${new Date().toISOString()}] Finished blocking task in ${endTime - startTime}ms`);
+  
+  res.json({ success: true, result, timeTakenMs: endTime - startTime });
+});
+
+// @route   GET /api/heavy-task
+// @desc    Offloads heavy task to a Worker Thread
+app.get('/api/heavy-task', (req, res) => {
+  console.log(`[${new Date().toISOString()}] Starting worker task...`);
+  const startTime = Date.now();
+  
+  const worker = new Worker('./worker.js', {
+    workerData: { iterations: 1000000000 }
+  });
+
+  worker.on('message', (result) => {
+    const endTime = Date.now();
+    console.log(`[${new Date().toISOString()}] Finished worker task in ${endTime - startTime}ms`);
+    res.json({ success: true, result, timeTakenMs: endTime - startTime });
+  });
+
+  worker.on('error', (err) => {
+    console.error('Worker error:', err);
+    res.status(500).json({ error: err.message });
+  });
 });
 
 // 🔹 Start server
