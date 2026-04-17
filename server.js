@@ -57,6 +57,10 @@ io.on('connection', (socket) => {
 // ✅ DB CONNECTION
 const connectDB = require('./db');
 
+// ✅ REDIS CACHE
+const redis = require('redis');
+const client = redis.createClient();
+client.connect().catch(console.error);
 // 🔗 Controller
 const userController = require('./controllers/userController');
 
@@ -236,6 +240,51 @@ app.get('/api/posts', async (req, res) => {
       totalPosts: total,
       posts
     });
+  } catch (err) {
+    res.status(500).send('Server Error');
+  }
+});
+
+// @route   GET /api/posts/:id
+// @desc    Get post by ID (with Redis caching)
+app.get('/api/posts/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    // 1. Try to fetch from Redis
+    const cachedPost = await client.get(id);
+
+    if (cachedPost) {
+      console.log("Cache Hit! Returning data from Redis.");
+      return res.json(JSON.parse(cachedPost));
+    }
+
+    // 2. If not in Redis, fetch from MongoDB
+    const post = await Post.findById(id);
+
+    if (!post) return res.status(404).send('Post not found');
+
+    // 3. Save to Redis with an Expiry (TTL) of 1 hour (3600 seconds)
+    // This ensures the cache doesn't stay "stale" forever
+    await client.setEx(id, 3600, JSON.stringify(post));
+
+    console.log("Cache Miss. Fetching from DB and updating Redis.");
+    res.json(post);
+  } catch (err) {
+    res.status(500).send('Server Error');
+  }
+});
+
+// @route   PUT /api/posts/:id
+// @desc    Update a post and invalidate cache
+app.put('/api/posts/:id', async (req, res) => {
+  try {
+    const post = await Post.findByIdAndUpdate(req.params.id, req.body, { new: true });
+
+    // CRITICAL: Delete the old cache so the next GET fetches fresh data
+    await client.del(req.params.id);
+
+    res.json(post);
   } catch (err) {
     res.status(500).send('Server Error');
   }
