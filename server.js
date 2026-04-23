@@ -100,7 +100,7 @@ const apiLimiter = rateLimit({
   standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
   legacyHeaders: false,  // Disable the `X-RateLimit-*` headers
 });
-app.use('/api/', apiLimiter);
+// app.use('/api/', apiLimiter); // DISABLING FOR LOAD TESTING
 
 // 2. Strict login limiter: 5 attempts per hour
 const loginLimiter = rateLimit({
@@ -255,6 +255,16 @@ app.get('/api/posts', async (req, res) => {
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
 
+    const cacheKey = `posts_page_${page}_limit_${limit}`;
+
+    // CHECK CACHE IF ENABLED
+    if (process.env.ENABLE_CACHE === 'true') {
+      const cached = await client.get(cacheKey);
+      if (cached) {
+        return res.json(JSON.parse(cached));
+      }
+    }
+
     // Find posts, add pagination, and "fill in" the author name and email
     const posts = await Post.find()
       .skip(skip)
@@ -263,13 +273,20 @@ app.get('/api/posts', async (req, res) => {
       
     const total = await Post.countDocuments();
 
-    res.json({
+    const responseTemplate = {
       page,
       limit,
       totalPages: Math.ceil(total / limit),
       totalPosts: total,
       posts
-    });
+    };
+
+    // SET CACHE IF ENABLED
+    if (process.env.ENABLE_CACHE === 'true') {
+      await client.setEx(cacheKey, 3600, JSON.stringify(responseTemplate));
+    }
+
+    res.json(responseTemplate);
   } catch (err) {
     res.status(500).send('Server Error');
   }
