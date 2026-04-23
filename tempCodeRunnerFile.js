@@ -28,9 +28,9 @@ app.get('/user', (_req, res) => {
 
 // 🔹 Dummy Data
 const users = [
-  { id: 1, name: "Alice", status: "Active" },
-  { id: 2, name: "Bob", status: "Away" },
-  { id: 3, name: "Charlie", status: "Offline" }
+  { id: 1, name: "Saswat", status: "Active" },
+  { id: 2, name: "Sarthak", status: "Away" },
+  { id: 3, name: "Subrat", status: "Offline" }
 ];
 
 // 🔹 API Route

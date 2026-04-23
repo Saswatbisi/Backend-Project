@@ -5,6 +5,8 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { Worker } = require('worker_threads');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const app = express();
 
 const http = require('http');
@@ -74,6 +76,9 @@ const auth = require('./middleware/auth');
 // ✅ Port
 const port = process.env.PORT || 5000;
 
+// 🛡️ Helmet: Harden HTTP headers
+app.use(helmet());
+
 // 🔹 Middleware (Logging)
 app.use((req, _res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} request to ${req.url}`);
@@ -82,6 +87,31 @@ app.use((req, _res, next) => {
 
 // 🔹 Middleware (Parse JSON)
 app.use(express.json());
+
+// ═══════════════════════════════════════════
+// 🚦 RATE LIMITING
+// ═══════════════════════════════════════════
+
+// 1. General API limiter: 100 requests per 15 minutes
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100,
+  message: { error: 'Too many requests from this IP, please try again after 15 minutes.' },
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false,  // Disable the `X-RateLimit-*` headers
+});
+app.use('/api/', apiLimiter);
+
+// 2. Strict login limiter: 5 attempts per hour
+const loginLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5, // Only 5 failed attempts allowed per hour
+  message: { error: 'Too many login attempts. Account locked for 1 hour.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/api/login', loginLimiter);
+app.use('/api/register', loginLimiter);
 
 // ✅ Connect DB
 connectDB().then((connected) => {

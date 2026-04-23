@@ -15,5 +15,4 @@ By utilizing background workers or task queues, we offload CPU-intensive process
   - **Main Thread**: The primary thread natively provided by Node.js, responsible for event dispatching and handling non-blocking I/O functions. If overloaded, the entire app freezes.
   - **Worker Process / Thread**: An isolated parallel execution context that handles CPU-heavy logic simultaneously alongside the main thread without blocking incoming server requests.
 
----
-*Backend Pro-Tip: Use Worker Threads for CPU-bound tasks (math, encryption, image processing). Use Task Queues (BullMQ/Redis) for I/O-bound tasks (sending mass emails, 3rd party API polling, background DB migrations).*
+
