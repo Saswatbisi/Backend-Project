@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MeetMux WebSocket Client</title>
+    <style>
+        body { font-family: sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; }
+        .box { border: 1px solid #ccc; padding: 15px; margin-bottom: 20px; border-radius: 8px; }
+        button { padding: 8px 12px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 4px;}
+        input { padding: 8px; margin-right: 10px; border: 1px solid #ccc; border-radius: 4px;}
+        #messages { list-style-type: none; padding: 0; background: #f9f9f9; min-height: 150px; border: 1px solid #ddd; padding: 10px;}
+        #messages li { padding: 5px; border-bottom: 1px solid #eee; }
+    </style>
+</head>
+<body>
+    <h2>WebSocket Web Client</h2>
+    <p>Open this page in two different browser tabs to simulate two users talking.</p>
+    
+    <div class="box">
+        <h3>1. Global Activity Test</h3>
+        <input type="text" id="activityInput" placeholder="Activity Name (e.g., Chess Club)">
+        <button onclick="joinActivity()">Join Activity</button>
+    </div>
+
+    <div class="box">
+        <h3>2. Specific Room Test</h3>
+        <input type="text" id="eventInput" placeholder="Event ID (e.g., abc-123)">
+        <button onclick="subscribeEvent()">Subscribe to Event</button>
+    </div>
+
+    <div class="box">
+        <h3>Live Event Logs</h3>
+        <ul id="messages"></ul>
+    </div>
+
+    <!-- Automatically served by the Socket.io backend -->
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const messagesList = document.getElementById('messages');
+
+        function addMessage(text) {
+            const li = document.createElement('li');
+            li.textContent = text;
+            messagesList.prepend(li);
+        }
+
+        // Connection
+        socket.on('connect', () => {
+            addMessage(`🟢 Connected! Your specific Socket ID: ${socket.id}`);
+        });
+
+        // Listens for 'new_participant' emitted from backend to EVERYONE
+        socket.on('new_participant', (data) => {
+            addMessage(`📣 [Global Broadcast]: ${data.message}`);
+        });
+
+        function joinActivity() {
+            const name = document.getElementById('activityInput').value;
+            if (name) {
+                // Emit to backend
+                socket.emit('join_activity', { activityName: name });
+                addMessage(`You joined '${name}'. Now go to another tab and join an activity to see their message appear here!`);
+            }
+        }
+
+        // Listens for room-specific 'notification'
+        socket.on('notification', (msg) => {
+            addMessage(`🔒 [Room Update]: ${msg}`);
+        });
+
+        function subscribeEvent() {
+            const eventId = document.getElementById('eventInput').value;
+            if (eventId) {
+                // Connect to specific room
+                socket.emit('subscribe_to_event', eventId);
+                addMessage(`You subscribed to Room: ${eventId}. The server immediately broadcasted an update back to this room.`);
+            }
+        }
+    </script>
+</body>
+</html>
