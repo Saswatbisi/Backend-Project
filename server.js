@@ -70,6 +70,10 @@ const userController = require('./controllers/userController');
 const User = require('./models/User');
 const Post = require('./models/Post');
 
+// 📄 SWAGGER DOCUMENTATION
+const swaggerUi = require('swagger-ui-express');
+const swaggerSpec = require('./swagger_config');
+
 // ✅ AUTH MIDDLEWARE
 const auth = require('./middleware/auth');
 
@@ -87,6 +91,12 @@ app.use((req, _res, next) => {
 
 // 🔹 Middleware (Parse JSON)
 app.use(express.json());
+
+// 📄 Swagger UI - Live Interactive API Documentation
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+  customCss: '.swagger-ui .topbar { display: none }',
+  customSiteTitle: 'Platform Core API Docs',
+}));
 
 // ═══════════════════════════════════════════
 // 🚦 RATE LIMITING
@@ -124,11 +134,56 @@ connectDB().then((connected) => {
 // 🔹 ROUTES
 // ═══════════════════════════════════════════
 
+/**
+ * @swagger
+ * /:
+ *   get:
+ *     summary: Health check
+ *     description: Returns server status
+ *     tags: [Health]
+ *     responses:
+ *       200:
+ *         description: Server is running
+ */
 // 🔹 Home Route
 app.get('/', (_req, res) => {
   res.send('Server Running');
 });
 
+/**
+ * @swagger
+ * /api/users:
+ *   get:
+ *     summary: Get all users (paginated)
+ *     description: Retrieves a paginated list of all registered users. Passwords are excluded from the response. Used by the Analyst team for user metrics.
+ *     tags: [Users]
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Page number
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         description: Number of users per page
+ *     responses:
+ *       200:
+ *         description: Paginated list of users
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/PaginatedUsers'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
 // 🔹 GET Users (Controller)
 app.get('/api/users', userController.getUsers);
 
@@ -136,6 +191,39 @@ app.get('/api/users', userController.getUsers);
 // 🔐 SECTION 1: REGISTER (Password Hashing with Bcrypt)
 // ═══════════════════════════════════════════
 
+/**
+ * @swagger
+ * /api/register:
+ *   post:
+ *     summary: Register a new user
+ *     description: Creates a new user account. Password is hashed using bcrypt before storage.
+ *     tags: [Authentication]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/RegisterInput'
+ *     responses:
+ *       201:
+ *         description: User registered successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/RegisterResponse'
+ *       400:
+ *         description: Validation error or user already exists
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       429:
+ *         description: Too many registration attempts
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/RateLimitError'
+ */
 app.post('/api/register', async (req, res) => {
   try {
     const { username, email, password } = req.body;
@@ -176,6 +264,39 @@ app.post('/api/register', async (req, res) => {
 // 🔐 SECTION 2: LOGIN (JWT Token Issuance)
 // ═══════════════════════════════════════════
 
+/**
+ * @swagger
+ * /api/login:
+ *   post:
+ *     summary: Login and receive JWT token
+ *     description: Authenticates a user and returns a JWT token valid for 1 hour. This token must be passed in the `x-auth-token` header for protected routes.
+ *     tags: [Authentication]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/LoginInput'
+ *     responses:
+ *       200:
+ *         description: Login successful, JWT token returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/LoginResponse'
+ *       400:
+ *         description: Invalid credentials or missing fields
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       429:
+ *         description: Too many login attempts (rate limited)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/RateLimitError'
+ */
 app.post('/api/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -219,6 +340,36 @@ app.post('/api/login', async (req, res) => {
 // 🔐 SECTION 3: PROTECTED ROUTE (Dashboard)
 // ═══════════════════════════════════════════
 
+/**
+ * @swagger
+ * /api/dashboard:
+ *   get:
+ *     summary: Access the protected dashboard
+ *     description: Returns the authenticated user's dashboard data. Requires a valid JWT token in the `x-auth-token` header.
+ *     tags: [Protected]
+ *     security:
+ *       - TokenAuth: []
+ *     responses:
+ *       200:
+ *         description: Dashboard data for authenticated user
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Welcome to the Private Dashboard
+ *                 user:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                     username:
+ *                       type: string
+ *       401:
+ *         description: Unauthorized - no token or invalid token
+ */
 app.get('/api/dashboard', auth, (req, res) => {
   res.json({
     message: 'Welcome to the Private Dashboard',
@@ -230,6 +381,33 @@ app.get('/api/dashboard', auth, (req, res) => {
 // 📝 SECTION 4: POSTS (Data Relationships & Population)
 // ═══════════════════════════════════════════
 
+/**
+ * @swagger
+ * /api/posts:
+ *   post:
+ *     summary: Create a new post
+ *     description: Creates a post linked to the authenticated user. Requires JWT token. Used by the AI/ML team to push feature data.
+ *     tags: [Posts]
+ *     security:
+ *       - TokenAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/PostInput'
+ *     responses:
+ *       200:
+ *         description: Post created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Post'
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
 // @route   POST /api/posts
 // @desc    Create a post linked to the logged-in user
 app.post('/api/posts', auth, async (req, res) => {
@@ -247,6 +425,36 @@ app.post('/api/posts', auth, async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/posts:
+ *   get:
+ *     summary: Get all posts (paginated, cached)
+ *     description: Retrieves a paginated list of posts with populated author details. Supports Redis caching. This is the primary data-pull endpoint for the Analyst team.
+ *     tags: [Posts]
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Page number
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         description: Results per page
+ *     responses:
+ *       200:
+ *         description: Paginated list of posts
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/PaginatedPosts'
+ *       500:
+ *         description: Server error
+ */
 // @route   GET /api/posts
 // @desc    Get all posts with Author details and pagination
 app.get('/api/posts', async (req, res) => {
@@ -292,6 +500,32 @@ app.get('/api/posts', async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/posts/{id}:
+ *   get:
+ *     summary: Get a single post by ID
+ *     description: Retrieves a specific post by MongoDB ObjectId. Uses Redis caching with 1-hour TTL. Used by the AI/ML team for individual feature lookups.
+ *     tags: [Posts]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: MongoDB ObjectId of the post
+ *     responses:
+ *       200:
+ *         description: Post found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Post'
+ *       404:
+ *         description: Post not found
+ *       500:
+ *         description: Server error
+ */
 // @route   GET /api/posts/:id
 // @desc    Get post by ID (with Redis caching)
 app.get('/api/posts/:id', async (req, res) => {
@@ -322,6 +556,36 @@ app.get('/api/posts/:id', async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/posts/{id}:
+ *   put:
+ *     summary: Update a post by ID
+ *     description: Updates a post and invalidates the Redis cache entry to ensure data consistency.
+ *     tags: [Posts]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: MongoDB ObjectId of the post to update
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/PostInput'
+ *     responses:
+ *       200:
+ *         description: Post updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Post'
+ *       500:
+ *         description: Server error
+ */
 // @route   PUT /api/posts/:id
 // @desc    Update a post and invalidate cache
 app.put('/api/posts/:id', async (req, res) => {
@@ -341,6 +605,28 @@ app.put('/api/posts/:id', async (req, res) => {
 // ⚙️ SECTION 5: BACKGROUND TASKS & QUEUES
 // ═══════════════════════════════════════════
 
+/**
+ * @swagger
+ * /api/block:
+ *   get:
+ *     summary: Blocking CPU task (demonstration)
+ *     description: Deliberately blocks the event loop to demonstrate why worker threads are needed. Do NOT call in production.
+ *     tags: [Performance]
+ *     responses:
+ *       200:
+ *         description: Task completed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 result:
+ *                   type: number
+ *                 timeTakenMs:
+ *                   type: number
+ */
 // @route   GET /api/block
 // @desc    Blocking route that freezes the event loop
 app.get('/api/block', (req, res) => {
@@ -356,6 +642,34 @@ app.get('/api/block', (req, res) => {
   res.json({ success: true, result, timeTakenMs: endTime - startTime });
 });
 
+/**
+ * @swagger
+ * /api/heavy-task:
+ *   get:
+ *     summary: Non-blocking heavy task (Worker Thread)
+ *     description: Offloads a CPU-intensive computation to a worker thread, keeping the event loop free for other requests.
+ *     tags: [Performance]
+ *     responses:
+ *       200:
+ *         description: Task completed via worker thread
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 result:
+ *                   type: number
+ *                 timeTakenMs:
+ *                   type: number
+ *       500:
+ *         description: Worker error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
 // @route   GET /api/heavy-task
 // @desc    Offloads heavy task to a Worker Thread
 app.get('/api/heavy-task', (req, res) => {
@@ -378,7 +692,13 @@ app.get('/api/heavy-task', (req, res) => {
   });
 });
 
-// 🔹 Start server
-server.listen(port, () => {
-  console.log(`🚀 Server started on port ${port}`);
-});
+// 🔹 Start server (only when not in test mode)
+if (process.env.NODE_ENV !== 'test') {
+  server.listen(port, () => {
+    console.log(`🚀 Server started on port ${port}`);
+    console.log(`📄 API Docs available at http://localhost:${port}/api-docs`);
+  });
+}
+
+// Export app for integration testing with Supertest
+module.exports = app;
